@@ -1,0 +1,287 @@
+# 🍬 Nassau Candy — AI Decision Intelligence Platform
+
+**A transparent, explainable machine learning + optimization system for shipping
+performance prediction and factory-reallocation recommendations.**
+
+Built with real order data, honest data-quality auditing, and a fully
+reproducible ML pipeline — not a templated dashboard with placeholder numbers.
+
+---
+
+## ⚠️ Read This First — Data Honesty Statement
+
+This project is built on `Nassau_Candy_Distributor.csv`, which contains **real
+order, customer, and financial data** but **no factory table, no factory
+coordinates, and no customer coordinates**. Two decisions were made to make
+factory-optimization possible at all, and both are disclosed everywhere they
+apply, in the app and in the code:
+
+| Gap in the data | What this project does | Disclosed in |
+|---|---|---|
+| No factory identifiers or locations exist | A 3-factory network (Chocolate / Sugar / Other) is **derived from the real `Division` column** and placed at real US logistics-hub coordinates (Chicago, Atlanta, Allentown) — illustrative, not Nassau Candy's actual plants | `src/factory_mapping.py`, sidebar of every app page |
+| No customer coordinates exist | Customer locations are approximated at the **State/Province level** using public geographic centroids (616 cities → 59 states/provinces) | `src/geo_lookup.py`, Geographic Dashboard |
+| **`Ship Date` column is corrupted** — raw `Ship Date − Order Date` ranges from **904 to 1,642 days**, which is not physically plausible for candy shipping | Excluded from modeling entirely. Lead time is instead **simulated** from the real `Ship Mode` column (a trustworthy, real signal) plus a distance component | `src/feature_engineering.py`, Data Quality Report page |
+
+Everything else — **Sales, Cost, Gross Profit, Units, Region, Division, Ship
+Mode, City/State** — is **100% real, unmodified data**, verified internally
+consistent during the audit (Sales = Cost + Gross Profit exactly, no
+negatives, no missing values, no duplicates).
+
+The **Data Quality Report** page in the app shows this full audit, including
+the evidence for the Ship Date finding, so nothing here is taken on faith.
+
+---
+
+## 🎯 Business Problem
+
+Nassau Candy assigns products to (illustrative) factories using a static rule
+— by product Division. This project asks: *if we predicted shipping
+performance instead, would a different factory assignment do better?*
+
+The system:
+1. Audits the data and reports exactly what's real vs. assumed
+2. Engineers business features from real columns (margin, distance, demand, risk)
+3. Trains and compares multiple regression models to predict lead time
+4. Simulates every order against every candidate factory
+5. Produces ranked, explainable reallocation recommendations
+6. Surfaces all of it through an 8-page executive web app
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│   Raw CSV            │ →   │  Preprocessing &      │ →   │  Feature             │
+│   (10,194 orders)     │     │  Data Quality Audit   │     │  Engineering (41 cols)│
+└─────────────────────┘     └──────────────────────┘     └──────────┬──────────┘
+                                                                       │
+                ┌──────────────────────────────────────────────────────┘
+                ▼
+┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│  Model Training &     │ →   │  Route Clustering      │ →   │  Optimization Engine │
+│  Comparison (4 models)│     │  (K-Means, auto-k)     │     │  (vectorized sim)     │
+└──────────┬──────────┘     └──────────────────────┘     └──────────┬──────────┘
+           │                                                          │
+           └──────────────────────────┬───────────────────────────────┘
+                                       ▼
+                          ┌──────────────────────────┐
+                          │   Streamlit App (8 pages) │
+                          │   Executive · Simulator ·  │
+                          │   What-If · Recommendations│
+                          │   · Risk · ML · Geo · DQ   │
+                          └──────────────────────────┘
+```
+
+---
+
+## 📊 Dataset
+
+| | |
+|---|---|
+| Rows | 10,194 orders |
+| Columns | 18 raw → 41 after feature engineering |
+| Time span | Orders: Jan 2024 – Dec 2025 |
+| Geography | United States & Canada, 59 states/provinces, 616 cities |
+| Products | 15 SKUs across 3 divisions (Chocolate, Sugar, Other) |
+| Missing values | 0 |
+| Duplicate rows | 0 |
+| Financial consistency | 100% (Sales = Cost + Gross Profit on every row) |
+
+Full audit results: `reports/data_quality_report.json` (generated by the pipeline) and the in-app **Data Quality Report** page.
+
+---
+
+## 🔬 Machine Learning Pipeline
+
+**Target:** `Simulated_Lead_Time_Days` (see data honesty statement above for why this is simulated rather than using the raw `Ship Date`).
+
+**Models trained & compared:**
+| Model | RMSE (days) | MAE (days) | R² | CV R² |
+|---|---|---|---|---|
+| Linear Regression | ~0.60 | ~0.48 | ~0.900 | ~0.899 ± 0.005 |
+| Gradient Boosting | ~0.61 | ~0.48 | ~0.898 | ~0.897 ± 0.005 |
+| Random Forest | ~0.63 | ~0.50 | ~0.891 | ~0.887 ± 0.004 |
+| XGBoost *(if installed)* | — | — | — | — |
+
+*(Exact numbers regenerate slightly on each pipeline run due to train/test
+splitting; see `reports/model_comparison.json` after running the pipeline for
+your exact results.)*
+
+**Why Linear Regression typically wins here:** the simulated lead-time target
+is constructed as a near-linear function of `Ship Mode` + distance + noise
+(see `add_simulated_lead_time` in `feature_engineering.py`), so a linear model
+fits it best with the lowest variance. This is an honest, explainable result
+of the data construction — not an accident. The **ML Dashboard** page shows
+full model comparison, feature importance, residual plots, and
+predicted-vs-actual accuracy for whichever model wins on your run.
+
+**Evaluation:** RMSE, MAE, R², 5-fold cross-validation, feature importance, residual analysis — all computed live, not hardcoded.
+
+---
+
+## 🧩 Clustering
+
+K-Means route clustering with **automatic k-selection** via the Elbow Method
++ Silhouette Score (tested k = 2–8). Clusters are relabeled into business
+language (Slow/Congested → Fast/Efficient) based on mean efficiency score,
+not arbitrary cluster IDs.
+
+---
+
+## ⚙️ Optimization Engine
+
+For every order, the engine simulates reassignment to **every** candidate
+factory, predicts lead time with the trained model, and scores each option on
+a transparent weighted formula:
+
+```
+Recommendation Score = 0.30 × Efficiency  (lead time, inverted)
+                      + 0.30 × Profit Score
+                      + 0.20 × (100 − Risk Score)
+                      + 0.20 × Efficiency  (lead time, inverted)
+```
+
+The simulation is **fully vectorized** (no per-row Python loops or per-row
+`model.predict()` calls) — it scores the entire 10,194-order dataset against
+all 3 factories in well under a second, so the Recommendation Dashboard runs
+live on every page load rather than relying on a precomputed cache.
+
+---
+
+## 🖥️ The App — 8 Pages
+
+| # | Page | What it shows |
+|---|---|---|
+| Home | **Landing** | KPI summary, data-honesty statement |
+| 1 | **Executive Dashboard** | KPIs, sales/profit/lead-time trends, factory & regional performance, Division→Factory→Region Sankey flow |
+| 2 | **Factory Simulator** | Pick product/region/ship mode → see predicted lead time, profit, risk under every factory |
+| 3 | **What-If Analysis** | Side-by-side current vs. recommended factory for any order, with confidence and business explanation |
+| 4 | **Recommendation Dashboard** | Ranked reallocation opportunities across the whole order book, downloadable CSV |
+| 5 | **Risk Dashboard** | Risk gauge, high-risk products/regions, factory utilization-vs-risk scatter, profit alerts |
+| 6 | **ML Dashboard** | Model comparison, feature importance, residual plot, predicted-vs-actual |
+| 7 | **Geographic Dashboard** | Factories, customer demand bubbles, shipping routes on a map |
+| 8 | **Data Quality Report** | The full audit, including the Ship Date anomaly evidence |
+
+All charts are interactive Plotly (line, bar, scatter, bubble, gauge, Sankey, geo).
+
+---
+
+## 📁 Project Structure
+
+```
+Nassau-Candy-AI-Optimization/
+├── data/
+│   ├── Nassau_Candy_Distributor.csv      # raw input
+│   └── processed_features.csv            # generated by run_pipeline.py
+├── notebooks/
+│   └── 01_exploratory_data_analysis.ipynb
+├── models/
+│   ├── best_model.pkl                    # generated by run_pipeline.py
+│   └── best_model_name.txt
+├── reports/
+│   ├── data_quality_report.json
+│   ├── model_comparison.json
+│   └── cluster_meta.json
+├── pages/                                # Streamlit multipage app
+│   ├── 1_Executive_Dashboard.py
+│   ├── 2_Factory_Simulator.py
+│   ├── 3_What_If_Analysis.py
+│   ├── 4_Recommendation_Dashboard.py
+│   ├── 5_Risk_Dashboard.py
+│   ├── 6_ML_Dashboard.py
+│   ├── 7_Geographic_Dashboard.py
+│   └── 8_Data_Quality_Report.py
+├── src/
+│   ├── preprocessing.py
+│   ├── feature_engineering.py
+│   ├── geo_lookup.py
+│   ├── factory_mapping.py
+│   ├── model_training.py
+│   ├── clustering.py
+│   ├── optimization_engine.py
+│   ├── recommender.py
+│   ├── theme.py
+│   ├── utils.py
+│   └── run_pipeline.py                   # orchestrates the full pipeline
+├── .streamlit/config.toml
+├── app.py                                 # main entry point
+├── requirements.txt
+├── LICENSE
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 🚀 Installation & How to Run
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/<your-username>/Nassau-Candy-AI-Optimization.git
+cd Nassau-Candy-AI-Optimization
+
+# 2. Create a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the pipeline once — cleans data, trains models, caches results
+python src/run_pipeline.py
+
+# 5. Launch the app
+streamlit run app.py
+```
+
+The app opens at `http://localhost:8501`. Step 4 takes under a minute and
+must be re-run any time `data/Nassau_Candy_Distributor.csv` changes (the
+generated `models/` and `data/processed_features.csv` files are gitignored
+by design — they're build artifacts, not source).
+
+---
+
+## 🛠️ Technologies Used
+
+- **Python 3.10+**
+- **pandas, numpy** — data processing
+- **scikit-learn** — Linear Regression, Random Forest, Gradient Boosting, K-Means, model evaluation
+- **xgboost** — optional gradient boosting comparison (app degrades gracefully if not installed)
+- **Streamlit** — web application framework
+- **Plotly** — all interactive visualizations
+
+---
+
+## 🔭 Future Improvements
+
+- Replace the assumed Division-based factory network with Nassau Candy's real factory list and coordinates, the moment that data is available
+- Replace state-centroid geocoding with precise city-level geocoding via a geocoding API
+- Investigate the root cause of the Ship Date corruption with the data owner and restore real lead-time modeling if a corrected export becomes available
+- Add a true mixed-integer optimization formulation (e.g. via PuLP/OR-Tools) for network-wide capacity-constrained reallocation, rather than per-order greedy scoring
+- Add authentication and role-based views for a real internal deployment
+
+---
+
+## 💼 Business Value
+
+Even built honestly around the data's real limitations, this project
+demonstrates the **full decision-intelligence pattern** a real Nassau Candy
+deployment would need: data quality auditing that catches corrupted source
+columns before they poison a model, explainable multi-model comparison,
+transparent multi-objective optimization, and an executive-ready interface —
+all swappable to real factory data with a one-line change to
+`src/factory_mapping.py`.
+
+---
+
+## 👤 Author
+
+Built as a portfolio-grade demonstration of an end-to-end ML + optimization
+decision-support system, with an emphasis on data-quality rigor and honest
+disclosure of assumptions — the parts of real-world data science that
+template generators usually skip.
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).

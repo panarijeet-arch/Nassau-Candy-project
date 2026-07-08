@@ -1,0 +1,27 @@
+{
+  "models": {
+    "Linear Regression": {
+      "rmse": 0.6040593312641798,
+      "mae": 0.4796606067041752,
+      "r2": 0.9000432678899782,
+      "cv_r2_mean": 0.8987316805471876,
+      "cv_r2_std": 0.005179415576422712
+    },
+    "Random Forest": {
+      "rmse": 0.6320848260062931,
+      "mae": 0.49966375125605555,
+      "r2": 0.8905530701240311,
+      "cv_r2_mean": 0.8868446968099899,
+      "cv_r2_std": 0.004290860232826006
+    },
+    "Gradient Boosting": {
+      "rmse": 0.6089947254153895,
+      "mae": 0.48373479111418016,
+      "r2": 0.8984032263402316,
+      "cv_r2_mean": 0.8970145959355241,
+      "cv_r2_std": 0.005082889292847955
+    }
+  },
+  "best_model": "Linear Regression",
+  "explanation": "Linear Regression was selected as the best model with a test R\u00b2 of 0.900 (cross-validated R\u00b2 0.899 \u00b1 0.005) and RMSE of 0.60 days. This outperforms the average of the other candidate models (R\u00b2 0.894) while keeping cross-validation variance low, indicating the model generalizes well rather than overfitting to the training split."
+}

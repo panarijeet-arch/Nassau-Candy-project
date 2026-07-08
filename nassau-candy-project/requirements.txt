@@ -1,0 +1,22 @@
+# Versions pinned to a known-working combination (verified on Streamlit
+# Community Cloud, 2026-07-02). Pinning prevents "dependency drift" --
+# where an unrelated future release of one of these libraries silently
+# changes behavior (e.g. stricter argument validation) and breaks the
+# app on a redeploy without any change to this repo's own code.
+# To intentionally upgrade later: bump one pin at a time and re-test.
+
+# Core data & ML
+pandas==3.0.3
+numpy==2.5.0
+scikit-learn==1.9.0
+scipy==1.18.0
+
+# Optional gradient boosting model (app falls back gracefully if unavailable)
+xgboost==3.3.0
+
+# Web app & visualization
+streamlit==1.58.0
+plotly==6.8.0
+
+# Utilities
+python-dateutil==2.9.0.post0

@@ -1,0 +1,71 @@
+{
+  "n_rows": 10194,
+  "n_cols": 18,
+  "missing_columns": [],
+  "missing_values": {
+    "Row ID": 0,
+    "Order ID": 0,
+    "Order Date": 0,
+    "Ship Date": 0,
+    "Ship Mode": 0,
+    "Customer ID": 0,
+    "Country/Region": 0,
+    "City": 0,
+    "State/Province": 0,
+    "Postal Code": 0,
+    "Division": 0,
+    "Region": 0,
+    "Product ID": 0,
+    "Product Name": 0,
+    "Sales": 0,
+    "Units": 0,
+    "Gross Profit": 0,
+    "Cost": 0
+  },
+  "duplicate_rows": 0,
+  "financial_inconsistent_rows": 0,
+  "negative_sales_rows": 0,
+  "negative_units_rows": 0,
+  "negative_cost_rows": 0,
+  "ship_date_anomaly": {
+    "order_date_range": [
+      "2024-01-02",
+      "2025-12-31"
+    ],
+    "ship_date_range": [
+      "2026-06-30",
+      "2030-06-28"
+    ],
+    "raw_lead_days_min": 904.0,
+    "raw_lead_days_max": 1642.0,
+    "raw_lead_days_mean": 1320.8418677653522,
+    "verdict": "ANOMALY CONFIRMED: raw (Ship Date - Order Date) ranges from 904 to 1642 days (mean 1321 days). This is not physically plausible for candy distribution. Root cause: Ship Date values cluster at fixed multi-year offsets from Order Date rather than a realistic few-day gap, indicating Ship Date was generated independently of Order Date (a known artifact in this sample dataset). Ship Date is EXCLUDED from lead-time modeling; a simulated, Ship-Mode-driven lead time is used instead and is clearly labeled as simulated throughout the app."
+  },
+  "Division_unique_values": [
+    "Chocolate",
+    "Other",
+    "Sugar"
+  ],
+  "Region_unique_values": [
+    "Atlantic",
+    "Gulf",
+    "Interior",
+    "Pacific"
+  ],
+  "Ship Mode_unique_values": [
+    "First Class",
+    "Same Day",
+    "Second Class",
+    "Standard Class"
+  ],
+  "Country/Region_unique_values": [
+    "Canada",
+    "United States"
+  ],
+  "outlier_counts_iqr": {
+    "Sales": 245,
+    "Units": 175,
+    "Gross Profit": 217,
+    "Cost": 397
+  }
+}
